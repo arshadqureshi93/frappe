@@ -32,6 +32,14 @@ patches by using INI like file format:
 
 3. simple python commands can be added by starting line with `execute:`
 `execute:` example: `execute:print("hello world")`
+
+4. patches can be marked as optional by prefixing with `optional:`.
+Optional patches that fail during migration will be skipped (logged with
+traceback) and retried on the next migration run, without blocking the
+rest of the migration. This is useful for patches that are not critical
+and can tolerate temporary failure.
+`optional:` example: `optional:app.module.non_critical_patch`
+Can be combined with execute: `optional:execute:print("hello world")`
 """
 
 import configparser
@@ -63,7 +71,7 @@ def run_all(skip_failing: bool = False, patch_type: PatchType | None = None) -> 
 				print(patch + ": failed: STOPPED")
 				raise PatchError(patch)
 		except Exception:
-			if not skip_failing:
+			if not skip_failing and not patch.startswith("optional:"):
 				raise
 
 			print("Failed to execute patch")
@@ -158,6 +166,8 @@ def execute_patch(patchmodule: str, method=None, methodargs=None):
 	"""execute the patch"""
 	_patch_mode(True)
 
+	patchmodule = patchmodule.removeprefix("optional:")
+
 	if patchmodule.startswith("execute:"):
 		has_patch_file = False
 		patch = patchmodule.split("execute:")[1]
@@ -222,6 +232,7 @@ def update_patch_log(patchmodule, skipped=False):
 
 def executed(patchmodule):
 	"""return True if is executed"""
+	patchmodule = patchmodule.removeprefix("optional:")
 	if patchmodule.startswith("finally:"):
 		# patches are saved without the finally: tag
 		patchmodule = patchmodule.replace("finally:", "")
